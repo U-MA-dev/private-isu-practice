@@ -177,6 +177,15 @@ func getFlash(w http.ResponseWriter, r *http.Request, key string) string {
 func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, error) {
 	var posts []Post
 
+	userIDs := make([]int, 0, len(results))
+	for _, p := range results {
+		userIDs = append(userIDs, p.UserID)
+	}
+	users := preloadUsers(userIDs)
+	for _, p := range results {
+		p.User = users[p.UserID]
+	}
+
 	for _, p := range results {
 		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
 		if err != nil {
@@ -193,11 +202,9 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 			return nil, err
 		}
 
+		// preloadしたuser情報に変更
 		for i := 0; i < len(comments); i++ {
-			err := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
-			if err != nil {
-				return nil, err
-			}
+			comments[i].User = users[comments[i].UserID]
 		}
 
 		// reverse
@@ -206,12 +213,8 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		}
 
 		p.Comments = comments
-
-		err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
-		if err != nil {
-			return nil, err
-		}
-
+		// preloadしたuser情報に変更
+		p.User = users[p.UserID]
 		p.CSRFToken = csrfToken
 
 		if p.User.DelFlg == 0 {
@@ -223,6 +226,33 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 	}
 
 	return posts, nil
+}
+
+func preloadUsers(ids []int) map[int]User {
+	users := map[int]User{}
+	if len(users) == 0 {
+		return users
+	}
+
+	params := make([]interface{}, 0, len(ids))
+	placeholders := make([]string, 0, len(ids))
+	for _, id := range ids {
+		params = append(params, id)
+		placeholders = append(placeholders, "?")
+	}
+	us := []User{}
+	err := db.Select(
+		&us, "SELECT * FROM `users` WHERE `id` IN("+strings.Join(placeholders, ",")+")",
+		params...,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, u := range us {
+		users[u.ID] = u
+	}
+
+	return users
 }
 
 func imageURL(p Post) string {
