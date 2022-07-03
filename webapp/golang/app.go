@@ -116,7 +116,7 @@ func validateUser(accountName, password string) bool {
 // 取り急ぎPHPのescapeshellarg関数を参考に自前で実装
 // cf: http://jp2.php.net/manual/ja/function.escapeshellarg.php
 func digest(src string) string {
-	return fmt.Sprintf("%s", sha512.Sum512([]byte(src)))
+	return fmt.Sprintf("%x", sha512.Sum512([]byte(src)))
 }
 
 func calculateSalt(accountName string) string {
